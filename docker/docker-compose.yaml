@@ -1,0 +1,95 @@
+name: 'tdkkesler'
+services:
+  ros-core:
+    profiles: ['communication']
+    image: osrf/ros:noetic-desktop-full
+    container_name: kesler-ros-core
+    command: "rosmaster --core"
+    network_mode: host
+    stop_grace_period: 1s
+    healthcheck:
+      test: /ros_entrypoint.sh bash -c "rostopic list || exit 1"
+      interval: 3s
+      timeout: 10s
+      retries: 5
+
+  ros1-bridge:
+    profiles: ['communication']
+    build:
+      context: .
+      dockerfile: dockerfile
+      target: release
+    image: kesler/tdk:communication
+    container_name: kesler-ros2-ros1-bridge
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - ROS_DOMAIN_ID=24
+    stop_grace_period: 1s
+    depends_on:
+      ros-core:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    network_mode: host
+    working_dir: /
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /dev/dri:/dev/dri
+      - /dev/shm:/dev/shm
+    command: >
+      bash -c "export ROS_MASTER_URI=http://localhost:11311 &&
+               source /ros2_humble/install/setup.bash &&
+               source /ros2_humble/install/ros1_bridge/share/ros1_bridge/local_setup.bash &&
+               ros2 run ros1_bridge dynamic_bridge --bridge-all-topics --ros-args --remap __node:=kesler_bridge"
+
+  ros1:
+    profiles: ['communication']
+    image: osrf/ros:noetic-desktop-full
+    container_name: kesler-ros1
+    stdin_open: true
+    tty: true
+    network_mode: host
+    privileged: true
+    volumes:
+      - ../comm-ws:/root/comm-ws
+      - /dev/bus/usb:/dev/bus/usb
+    stop_grace_period: 1s
+    depends_on:
+      ros-core:
+        condition: service_healthy
+    command: >
+      /bin/bash -c "
+      source /opt/ros/noetic/setup.bash && 
+      source /root/comm-ws/devel/setup.bash && 
+      cd /root/comm-ws &&
+      echo 'Waiting for TTY device...' &&
+      while [ ! -e /dev/ttyACM0 ]; do
+        echo 'TTY device /dev/ttyACM0 not found, waiting...'
+        sleep 2
+      done &&
+      echo 'TTY device found, setting permissions...' &&
+      sudo chmod 777 /dev/ttyACM0 &&
+      echo 'Launching rosserial server...' &&
+      roslaunch rosserial_server stm32.launch
+      "
+
+  ros2:
+    profiles: ['communication']
+    image: osrf/ros:humble-desktop-full
+    container_name: kesler-ros2
+    stdin_open: true
+    tty: true
+    network_mode: host
+    stop_grace_period: 1s
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - ROS_DOMAIN_ID=24
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw      
+      - $HOME/.Xauthority:/root/.Xauthority:rw
+      - /dev/shm:/dev/shm
+      - ../ros2_ws:/root/ros2_ws
+    command: /bin/bash -c "apt update && apt install -y ros-humble-rmw-cyclonedds-cpp && source /opt/ros/humble/setup.bash && bash"
