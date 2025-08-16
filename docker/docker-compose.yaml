@@ -106,7 +106,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw      
       - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.X11-unix/Xauthority:rw
       - /dev/shm:/dev/shm
-      - $PWD/../ros2-ws:/home/opencv/vision-ws/src/opencv_ros
+      - $PWD/../packages/ros2-pkg:/home/opencv/vision-ws/src/opencv_ros
     command: /bin/bash -c "source /opt/ros/humble/setup.bash && echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc && bash"
 
 # camera service
