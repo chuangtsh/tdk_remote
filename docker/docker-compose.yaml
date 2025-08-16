@@ -1,9 +1,16 @@
 name: 'tdkkesler'
+
+# Common environment for services
+x-common-env: &common-env
+  tty: true
+  stdin_open: true
+  stop_grace_period: 1s
+
 services:
   ros-core:
     profiles: ['communication']
     image: osrf/ros:noetic-desktop-full
-    container_name: kesler-ros-core
+    container_name: kesler-ros-core-x1
     command: "rosmaster --core"
     network_mode: host
     stop_grace_period: 1s
@@ -17,10 +24,10 @@ services:
     profiles: ['communication']
     build:
       context: .
-      dockerfile: dockerfile
+      dockerfile: dockerfile.commun
       target: release
-    image: kesler/tdk:communication
-    container_name: kesler-ros2-ros1-bridge
+    image: comm-tdk-x1:bridge
+    container_name: kesler-ros2-ros1-bridge-x1
     environment:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - ROS_DOMAIN_ID=24
@@ -41,12 +48,12 @@ services:
       bash -c "export ROS_MASTER_URI=http://localhost:11311 &&
                source /ros2_humble/install/setup.bash &&
                source /ros2_humble/install/ros1_bridge/share/ros1_bridge/local_setup.bash &&
-               ros2 run ros1_bridge dynamic_bridge --bridge-all-topics --ros-args --remap __node:=kesler_bridge"
+               ros2 run ros1_bridge dynamic_bridge --bridge-all-topics --ros-args --remap __node:=kesler_ros_bridge"
 
   ros1:
     profiles: ['communication']
     image: osrf/ros:noetic-desktop-full
-    container_name: kesler-ros1
+    container_name: kesler-ros1-x1
     stdin_open: true
     tty: true
     network_mode: host
@@ -75,21 +82,55 @@ services:
       "
 
   ros2:
-    profiles: ['communication']
-    image: osrf/ros:humble-desktop-full
-    container_name: kesler-ros2
-    stdin_open: true
-    tty: true
+    profiles: ['communication', 'camera']
+    build:
+      context: .
+      dockerfile: dockerfile.camera
+      target: opencv
+      args:
+        USER: opencv
+    <<: *common-env
+    image: vision-tdk-x1:ros2
+    container_name: kesler-ros2-x1
     network_mode: host
     stop_grace_period: 1s
     environment:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - ROS_DOMAIN_ID=24
-      - DISPLAY=${DISPLAY}
+      - DISPLAY=${DISPLAY:-:0}
       - QT_X11_NO_MITSHM=1
+      - XAUTHORITY=/tmp/.X11-unix/Xauthority
     volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
       - /tmp/.X11-unix:/tmp/.X11-unix:rw      
-      - $HOME/.Xauthority:/root/.Xauthority:rw
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.X11-unix/Xauthority:rw
       - /dev/shm:/dev/shm
-      - ../ros2_ws:/root/ros2_ws
-    command: /bin/bash -c "apt update && apt install -y ros-humble-rmw-cyclonedds-cpp && source /opt/ros/humble/setup.bash && bash"
+      - $PWD/../ros2-ws:/home/opencv/vision-ws/src/opencv_ros
+    command: /bin/bash -c "source /opt/ros/humble/setup.bash && echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc && bash"
+
+# camera service
+  realsense: 
+    profiles: ['camera']
+    build:
+      context: .
+      target: realsense  
+      dockerfile: dockerfile.camera
+      args:
+        USER: realsense
+        LIBREALSENSE_VERSION: 2.56.2
+    <<: *common-env
+    network_mode: host
+    image: vision-tdk-x1:realsense
+    container_name: kesler-realsense-x1
+    volumes:
+      - /dev:/dev
+      - $PWD/../packages/realsense-pkg:/home/realsense/vision-ws/src/realsense-ros
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - ROS_DOMAIN_ID=24
+    device_cgroup_rules:
+      - "c 81:* rmw"
+      - "c 189:* rmw"
+    command: bash
+    #bash -ic "colcon build && ros2 launch realsense2_camera rs_launch.py"
