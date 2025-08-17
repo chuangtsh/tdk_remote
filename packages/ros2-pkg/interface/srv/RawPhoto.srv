@@ -1,0 +1,3 @@
+int32 stage
+---
+sensor_msgs/Image response
