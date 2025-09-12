@@ -44,11 +44,13 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /dev/dri:/dev/dri
       - /dev/shm:/dev/shm
+      - ./bridge.yaml:/bridge.yaml:ro
     command: >
       bash -c "export ROS_MASTER_URI=http://localhost:11311 &&
+               echo 'starting bridge with topic filtering' && 
                source /ros2_humble/install/setup.bash &&
                source /ros2_humble/install/ros1_bridge/share/ros1_bridge/local_setup.bash &&
-               ros2 run ros1_bridge dynamic_bridge --bridge-all-topics --ros-args --remap __node:=kesler_ros_bridge"
+               ros2 run ros1_bridge dynamic_bridge --ros-args --remap __node:=kesler_ros_bridge"
 
   ros1:
     profiles: ['communication']
@@ -82,7 +84,7 @@ services:
       "
 
   ros2:
-    profiles: ['communication', 'camera']
+    profiles: ['camera']
     build:
       context: .
       dockerfile: dockerfile.camera
@@ -107,7 +109,7 @@ services:
       - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.X11-unix/Xauthority:rw
       - /dev/shm:/dev/shm
       - $PWD/../packages/ros2-pkg:/home/opencv/vision-ws/src/
-    command: /bin/bash -c "source /opt/ros/humble/setup.bash && echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc && bash"
+    command: /bin/bash -c "source /opt/ros/humble/setup.bash && echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc && colcon build --packages-select opencv_ros mission_ctrl && source install/setup.bash && ros2 launch opencv_ros coffee_detection.launch.py"
 
 # camera service
   realsense: 
@@ -132,4 +134,5 @@ services:
     device_cgroup_rules:
       - "c 81:* rmw"
       - "c 189:* rmw"
-    command: bash -ic "colcon build && source install/setup.bash && ros2 launch realsense2_camera rs_multi_camera_launch.py"
+    # command: bash -ic "colcon build && source install/setup.bash && ros2 launch realsense2_camera rs_multi_camera_launch.py"
+    command: bash -ic "colcon build && source install/setup.bash && ros2 launch realsense2_camera rs_multi_camera_launch.py "

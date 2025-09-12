@@ -1,0 +1,87 @@
+# ROS1-ROS2 Bridge Configuration
+# This file specifies which topics to bridge between ROS1 and ROS2
+# Only topics listed here will be bridged
+
+topics:
+  # Mission control topics (ROS2 -> ROS1)
+  
+  - topic: /x_trans
+    type: std_msgs/msg/Int32
+    queue_size: 10
+  
+  - topic: /cmd_coffeeTable
+    type: std_msgs/msg/Int32
+    queue_size: 10
+  
+  - topic: /cmd_CupColor
+    type: std_msgs/msg/Int32
+    queue_size: 10
+  
+  - topic: /current_stage
+    type: std_msgs/msg/Int32
+    queue_size: 10
+
+  # Hardware command topics (bidirectional)
+  - topic: /cmd_gripperOpen
+    type: std_msgs/msg/Bool
+    queue_size: 10
+  
+  - topic: /cmd_elevator
+    type: std_msgs/msg/Int32
+    queue_size: 10
+  
+  - topic: /cmd_basketDoor
+    type: std_msgs/msg/Bool
+    queue_size: 10
+  
+  - topic: /cmd_missionFinish
+    type: std_msgs/msg/Bool
+    queue_size: 10
+  
+  - topic: /cmd_servoturn
+    type: std_msgs/msg/Int32
+    queue_size: 10
+
+  # Hardware status topics (ROS1 -> ROS2)
+  - topic: /gripper
+    type: std_msgs/msg/Bool
+    queue_size: 10
+  
+  - topic: /basket
+    type: std_msgs/msg/Bool
+    queue_size: 10
+  
+  - topic: /touch
+    type: std_msgs/msg/Bool
+    queue_size: 10
+  
+  - topic: /elevator
+    type: std_msgs/msg/Float64
+    queue_size: 10
+
+
+  # ROS standard topics
+  - topic: /rosout
+    type: rcl_interfaces/msg/Log
+    queue_size: 10
+  
+  - topic: /rosout_agg
+    type: rcl_interfaces/msg/Log
+    queue_size: 10
+
+  # Parameter events (if needed)
+  - topic: /parameter_events
+    type: rcl_interfaces/msg/ParameterEvent
+    queue_size: 10
+
+
+  # Clock synchronization
+  - topic: /clock
+    type: rosgraph_msgs/msg/Clock
+    queue_size: 10
+
+# Explicitly exclude all image-related topics
+# (by not listing them here, they won't be bridged)
+# Excluded: /kesler/cam_forward/color/image_raw
+# Excluded: /kesler/cam_downward/color/image_raw
+# Excluded: All compressed image variants

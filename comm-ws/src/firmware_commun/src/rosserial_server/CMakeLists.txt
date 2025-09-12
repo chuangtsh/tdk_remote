@@ -40,6 +40,11 @@ target_link_libraries(${PROJECT_NAME}_serial_node ${catkin_LIBRARIES} ${PROJECT_
 set_target_properties(${PROJECT_NAME}_serial_node PROPERTIES OUTPUT_NAME serial_node PREFIX "")
 add_dependencies(${PROJECT_NAME}_serial_node ${catkin_EXPORTED_TARGETS})
 
+add_executable(${PROJECT_NAME}_serial_node_2 src/serial_node_2.cpp)
+target_link_libraries(${PROJECT_NAME}_serial_node_2 ${catkin_LIBRARIES} ${PROJECT_NAME}_lookup)
+set_target_properties(${PROJECT_NAME}_serial_node_2 PROPERTIES OUTPUT_NAME serial_node_2 PREFIX "")
+add_dependencies(${PROJECT_NAME}_serial_node_2 ${catkin_EXPORTED_TARGETS})
+
 add_executable(${PROJECT_NAME}_socket_node src/socket_node.cpp)
 target_link_libraries(${PROJECT_NAME}_socket_node ${catkin_LIBRARIES} ${PROJECT_NAME}_lookup)
 set_target_properties(${PROJECT_NAME}_socket_node PROPERTIES OUTPUT_NAME socket_node PREFIX "")

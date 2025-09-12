@@ -20,11 +20,12 @@ class Algorithm:
         # Convert to HSV for better color detection
         hsv = cv2.cvtColor(input_img, cv2.COLOR_BGR2HSV)
         
-        # Define more restrictive range for red color in HSV
-        # Red color has two ranges in HSV - making them tighter
-        lower_red1 = np.array([0, 120, 100])      # Higher saturation and value
+        # Define broader range for red color in HSV to detect darker red dots
+        # Lower the minimum value (brightness) to capture darker reds
+        # Lower the minimum saturation to capture less saturated reds
+        lower_red1 = np.array([0, 80, 20])       # Lowered value from 50 to 20 for much darker reds
         upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 120, 100])    # Higher saturation and value
+        lower_red2 = np.array([170, 80, 20])     # Lowered value from 50 to 20 for much darker reds
         upper_red2 = np.array([180, 255, 255])
         
         # Create masks for red color
@@ -32,9 +33,9 @@ class Algorithm:
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
         red_mask = cv2.bitwise_or(mask1, mask2)
         
-        # Apply more aggressive morphological operations to clean up the mask
-        kernel = np.ones((3, 3), np.uint8)
-        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel, iterations=2)
+        # Apply less aggressive morphological operations to preserve smaller darker dots
+        kernel = np.ones((2, 2), np.uint8)  # Smaller kernel to preserve detail
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel, iterations=1)
         red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
         
         return red_mask
@@ -73,8 +74,8 @@ class Algorithm:
         for contour in red_contours:
             area = cv2.contourArea(contour)
             
-            # Filter for small circular objects (red dots)
-            if 50 < area < 2000:  # Adjust size range for small dots
+            # Filter for small circular objects (red dots) - more permissive for darker dots
+            if 10 < area < 3000:  # Lower minimum area (20) and higher maximum (3000) for darker dots
                 # Get bounding rectangle
                 rect = cv2.boundingRect(contour)
                 x, y, w, h = rect
@@ -127,20 +128,33 @@ class Coffee(Node):
             self.image_callback,
             10
         )
+        # Add stage_step subscriber
+        self.stage_step_sub = self.create_subscription(
+            Int32,
+            "/current_stage",
+            self.stage_step_callback,
+            10
+        )
         # Create integer publisher for x-coordinate difference
         self.x_diff_publisher = self.create_publisher(Int32, 'x_trans', 10)
+        
+        # Initialize stage_step
+        self.stage_step = 0
 
     def image_callback(self, msg):
-        try:
-            self.cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            self.process_and_publish()
-        except Exception as e:
-            self.get_logger().error(f'Error converting image: {e}')
+        # Only process images when stage_step is in the appropriate range
+        if self.stage_step > 10 and self.stage_step < 30:
+            try:
+                self.cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+                self.process_and_publish()
+            except Exception as e:
+                self.get_logger().error(f'Error converting image: {e}')
             
     def process_and_publish(self):
         try:
             # image processing logic
             red_dot_center, sticker_center = process_image(self.cv_image)
+            red_dot_center[0] += 165
             
             # Calculate and publish x-coordinate difference
             if red_dot_center and sticker_center:
@@ -155,7 +169,7 @@ class Coffee(Node):
                 self.x_diff_publisher.publish(diff_msg)
                 
                 # Log the results
-                self.get_logger().info(f'Red dot at: {red_dot_center}, Sticker at: {sticker_center}, X-diff: {x_diff}')
+                # self.get_logger().info(f'Red dot at: {red_dot_center}, Sticker at: {sticker_center}, X-diff: {x_diff}')
             else:
                 # If either target is not found, publish 0 or a special value
                 diff_msg = Int32()
@@ -169,6 +183,11 @@ class Coffee(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error processing image: {e}')
+
+    def stage_step_callback(self, msg):
+        """Callback function for stage_step topic"""
+        self.stage_step = msg.data
+        # self.get_logger().info(f'Received stage_step: {self.stage_step}')
 
 
 def main(args=None):

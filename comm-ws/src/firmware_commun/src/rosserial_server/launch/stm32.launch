@@ -5,7 +5,18 @@
         <param name="baud" value="115200" />
         <rosparam>
             require:
-                publishers: [ odometry ]
+                publishers: [  ]
+                subscribers: [ ]
+        </rosparam>
+    </node>
+    
+    <!-- Second serial node for ttyACM1 -->
+    <node pkg="rosserial_server" type="serial_node_2" name="rosserial_server_dp_2">
+        <param name="port" value="/dev/ttyACM1"/>
+        <param name="baud" value="115200" />
+        <rosparam>
+            require:
+                publishers: [  ]
                 subscribers: [ ]
         </rosparam>
     </node>

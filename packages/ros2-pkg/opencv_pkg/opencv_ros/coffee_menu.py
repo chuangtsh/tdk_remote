@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Int32
+from std_msgs.msg import Int32, Bool
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -294,6 +294,7 @@ def detect_parallelograms(img):
         most_distinct_idx, _, _ = find_most_distinct_parallelogram(img, parallelograms)
         color_analysis = analyze_region_color(img, parallelograms[most_distinct_idx])
         center_brightness = 1 if color_analysis.get('is_mostly_light', False) else 2
+        
         M = cv2.moments(parallelograms[most_distinct_idx])
         if M["m00"] != 0:
             cx = int(M["m10"] / M["m00"])
@@ -316,7 +317,7 @@ def detect_parallelograms(img):
 
 class Coffee(Node):
     def __init__(self):
-        super().__init__('coffee_node')
+        super().__init__('coffee_menu')
         self.bridge = CvBridge()
         self.img_sub = self.create_subscription(
             Image,
@@ -324,30 +325,47 @@ class Coffee(Node):
             self.image_callback,
             10
         )
-        self.coffee_type_pub = self.create_publisher(Int32, 'coffee_type', 10)
-        self.coffee_pose_pub = self.create_publisher(Int32, 'coffee_pose', 10)
+        # Add stage_step subscriber
+        self.stage_step_sub = self.create_subscription(
+            Int32,
+            "/current_stage",
+            self.stage_step_callback,
+            10
+        )
+        self.coffee_pose_pub = self.create_publisher(Int32, '/cmd_coffeeTable', 10)
+        self.coffee_type_pub = self.create_publisher(Int32, '/cmd_CupColor', 10)
 
+        # Initialize stage_step
+        self.stage_step = 0
 
     def image_callback(self, msg):
-        try:
-            self.cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            # Perform detection and get results
-            coffee_type, coffee_pose = detect_parallelograms(self.cv_image)
-            
-            # Create and publish messages
-            type_msg = Int32()
-            type_msg.data = coffee_type
-            pose_msg = Int32()
-            pose_msg.data = coffee_pose
-            
-            self.coffee_type_pub.publish(type_msg)
-            self.coffee_pose_pub.publish(pose_msg)
-            
-            # Log the published values
-            self.get_logger().info(f'Published coffee_type: {coffee_type}, coffee_pose: {coffee_pose}')
-            
-        except Exception as e:
-            self.get_logger().error(f'Error converting image: {e}')
+        # it can be smaller than 30
+        if (self.stage_step > 10 and self.stage_step < 30 ) or True:
+            try:
+                self.cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+                # Perform detection and get results
+                coffee_type, coffee_pose = detect_parallelograms(self.cv_image)
+                
+                # Create and publish messages
+                type_msg = Int32()
+                type_msg.data = coffee_type
+                pose_msg = Int32()
+                pose_msg.data = coffee_pose
+                
+                self.coffee_type_pub.publish(type_msg)
+                self.coffee_pose_pub.publish(pose_msg)
+                
+                # Log the published values
+                self.get_logger().info(f'Published coffee_type: {coffee_type}, coffee_pose: {coffee_pose}')
+                
+            except Exception as e:
+                self.get_logger().error(f'Error converting image: {e}')
+
+    def stage_step_callback(self, msg):
+        """Callback function for stage_step topic"""
+        self.stage_step = msg.data
+        # self.get_logger().info(f'Received stage_step: {self.stage_step}')
+        
 
 
 def main(args=None):

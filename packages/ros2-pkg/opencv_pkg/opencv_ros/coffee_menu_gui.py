@@ -314,7 +314,7 @@ def detect_parallelograms(img):
 
 class Coffee(Node):
     def __init__(self):
-        super().__init__('coffee_node')
+        super().__init__('coffee_gui')
         self.bridge = CvBridge()
         self.img_sub = self.create_subscription(
             Image,
