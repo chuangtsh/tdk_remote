@@ -25,6 +25,12 @@ public:
         sub_touch_ = this->create_subscription<std_msgs::msg::Bool>(
             "/touch", 10,
             std::bind(&MissionNode::callback_touch, this, _1));
+        sub_current_y_ = this->create_subscription<std_msgs::msg::Float64>(
+            "/current_y", 10,
+            std::bind(&MissionNode::callback_current_y, this, _1));
+        sub_current_theta_ = this->create_subscription<std_msgs::msg::Float64>(
+            "/current_theta", 10,
+            std::bind(&MissionNode::callback_current_theta, this, _1));
         // sub_elevator_status_ = this->create_subscription<std_msgs::msg::Float64>(
         //     "/elevator", 10,
         //     std::bind(&MissionNode::callback_elevator_status, this, _1));
@@ -35,6 +41,7 @@ public:
         pub_cmd_basket_door_ = this->create_publisher<std_msgs::msg::Bool>("/cmd_basketDoor", 10);
         pub_cmd_mission_finish_ = this->create_publisher<std_msgs::msg::Bool>("/cmd_missionFinish", 10);
         pub_cmd_servoturn_ = this->create_publisher<std_msgs::msg::Int32>("/cmd_servoturn", 10);
+        pub_cmd_forward_ = this->create_publisher<std_msgs::msg::Int32>("/cmd_forward", 10);
         
         // Create timer callback (executes every 10ms)
         timer_ = this->create_wall_timer(
@@ -60,6 +67,16 @@ private:
         touch = msg->data;
     }
 
+    void callback_current_y(const std_msgs::msg::Float64::SharedPtr msg) {
+        // RCLCPP_INFO(this->get_logger(), "Current Y received: %f", msg->data);
+        current_y = (int)msg->data;  // Convert float to int
+    }
+
+    void callback_current_theta(const std_msgs::msg::Float64::SharedPtr msg) {
+        // RCLCPP_INFO(this->get_logger(), "Current Theta received: %f", msg->data);
+        current_theta = (int)msg->data;  // Convert float to int
+    }
+
     void callback_basket_status(const std_msgs::msg::Bool::SharedPtr msg) {
         // RCLCPP_INFO(this->get_logger(), "Basket status received: %s", msg->data ? "finished" : "in progress");
         basket_status = msg->data;
@@ -73,8 +90,7 @@ private:
     void timer_callback() {
         int elevator_ctrl = 0; // reset is 0?
         bool basket_ctrl = 0; // closed is 0?
-        bool mission_complete = 0;
-        int servoturn_ctrl = 900; // servo turn command
+        int servoturn_ctrl = 0; // servo turn command
 
 
         if ( this->stage_step == 21 ) {
@@ -112,23 +128,46 @@ private:
                 gripper_ctrl = 0;
             }
             if ( gripper_status == 0 ) {
-                mission_complete = 1;
+                mission_complete = true;
             }
         }
         else if ( this->stage_step == 23 ) {
-            // to see the sticker
-            mission_complete = 1;
+            // to see the sticker, make cascade upper
+            // elevator_ctrl = 130;
+            if (!timer_1sec_started) {
+                timer_1sec_ = this->create_wall_timer(
+                    std::chrono::seconds(2),
+                    std::bind(&MissionNode::timer_1sec_callback, this));
+                timer_1sec_started = true;
+                RCLCPP_INFO(this->get_logger(), "2-second one-shot timer started ");
+            }
+
         }
         else if ( this->stage_step == 24 ) {
             // after go to the modified pose of the little table
-            elevator_ctrl = -1;
-            if ( touch == 1 && touched_for_sticker == 0) {
+            // elevator_ctrl = -1;
+            // if ( touch == 1 && touched_for_sticker == 0) {
+            //     touched_for_sticker = 1;
+            //     elevator_ctrl = 0;
+            //     gripper_ctrl = 1;
+            // }
+            // if ( touched_for_sticker == 1 && gripper_status == 1 ) {
+            //     mission_complete = 1;
+            // }
+            if ( touch == 1 ) {
                 touched_for_sticker = 1;
+            }
+            if ( touched_for_sticker == 0 ) {
+                elevator_ctrl = -1;
+            }
+            else {
                 elevator_ctrl = 0;
+            }
+            if ( touched_for_sticker == 1 ) {
                 gripper_ctrl = 1;
             }
-            if ( touched_for_sticker == 1 && gripper_status == 1 ) {
-                mission_complete = 1;
+            if ( gripper_status == 1 ) {
+                mission_complete = true;
             }
         }
         
@@ -154,16 +193,21 @@ private:
         servoturn_msg.data = servoturn_ctrl;
         pub_cmd_servoturn_->publish(servoturn_msg);
         
+        auto forward_msg = std_msgs::msg::Int32();
+        forward_msg.data = forward_ctrl;
+        pub_cmd_forward_->publish(forward_msg);
+        
         // RCLCPP_INFO(this->get_logger(), "Published commands - Gripper: %s, Elevator: %d, Basket: %s, Mission Complete: %s", 
         //             gripper_ctrl ? "open" : "closed", elevator_ctrl, basket_ctrl ? "open" : "closed", mission_complete ? "true" : "false");
     }
 
     void timer_1sec_callback() {
         // Your one-time code here that executes 1 second after touch
-        RCLCPP_INFO(this->get_logger(), "1-second one-shot timer executed!");
+        RCLCPP_INFO(this->get_logger(), "one-shot timer executed!");
         
         // Add your specific logic that should run once, 1 second after touch
-        mission_complete = 1; 
+        mission_complete = true; 
+        timer_1sec_started = false;
         
         // Cancel the timer after execution to prevent it from running again
         if (timer_1sec_) {
@@ -177,6 +221,8 @@ private:
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_gripper_status_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_basket_status_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_touch_; // whether the cascade has arrived to the pose
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr sub_current_y_;
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr sub_current_theta_;
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr sub_elevator_status_;
     
     // Publishers (sending commands to hardware)
@@ -185,6 +231,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_cmd_basket_door_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_cmd_mission_finish_;
     rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr pub_cmd_servoturn_;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr pub_cmd_forward_;
     
     // Timer
     rclcpp::TimerBase::SharedPtr timer_;
@@ -194,10 +241,14 @@ private:
     int stage_step = 0;
 
     bool gripper_ctrl = 1;
+    bool mission_complete = false;
+    int forward_ctrl = 217;
 
     bool gripper_status = 0;
     bool basket_status = 0;
     bool touch = 0;
+    int current_y = 0;
+    int current_theta = 0;
     bool touched_for_menu = 0;
     bool touched_for_sticker = 0;
     float elevator_status = 0;
