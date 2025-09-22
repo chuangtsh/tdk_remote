@@ -88,21 +88,16 @@ private:
     }
 
     void timer_callback() {
-        int elevator_ctrl = 0; // reset is 0?
+        int elevator_ctrl = 0; // 0 stop, 1 up, -1 down, 2: 650
         bool basket_ctrl = 0; // closed is 0?
-        int servoturn_ctrl = 0; // servo turn command
+        int servoturn_ctrl = 0; // servo turn command 1 is forward, 2 is backward
+        mission_complete = false;
+        // gripper_ctrl: 0 is back, 1 is forward
 
 
         if ( this->stage_step == 21 ) {
             // cascade down till get to the table
-            // gripper_ctrl = 1;
-            // elevator_ctrl = -1;
-            // if ( touch == 1 || touched_for_menu == 1) {
-            //     touched_for_menu = 1;
-            //     elevator_ctrl = 0;
-            //     mission_complete = 1;
-            // }
-            gripper_ctrl = 1;
+            gripper_ctrl = 0;
             if ( touched_for_menu == 0 ) {
                 elevator_ctrl = -1;
             }
@@ -114,59 +109,54 @@ private:
                 // Start 1-second one-shot timer when touched_for_menu becomes 1
                 if (!timer_1sec_started) {
                     timer_1sec_ = this->create_wall_timer(
-                        std::chrono::seconds(1),
+                        std::chrono::seconds(2),
                         std::bind(&MissionNode::timer_1sec_callback, this));
                     timer_1sec_started = true;
-                    RCLCPP_INFO(this->get_logger(), "1-second one-shot timer started after touch");
+                    // RCLCPP_INFO(this->get_logger(), "1-second one-shot timer started after touch");
                 }
             }
 
         }
         else if ( this->stage_step == 22 ) {
             // after go to the correct cup
+            gripper_ctrl = 1;
             if ( gripper_status == 1 ) {
-                gripper_ctrl = 0;
-            }
-            if ( gripper_status == 0 ) {
-                mission_complete = true;
+                elevator_ctrl = 2;
+                // Start 1-second one-shot timer when touched_for_menu becomes 1
+                if (!timer_1sec_started) {
+                    timer_1sec_ = this->create_wall_timer(
+                        std::chrono::seconds(5),
+                        std::bind(&MissionNode::timer_1sec_callback, this));
+                    timer_1sec_started = true;
+                    // RCLCPP_INFO(this->get_logger(), "1-second one-shot timer started after touch");
+                }
             }
         }
         else if ( this->stage_step == 23 ) {
             // to see the sticker, make cascade upper
-            // elevator_ctrl = 130;
+            elevator_ctrl = 2;
             if (!timer_1sec_started) {
                 timer_1sec_ = this->create_wall_timer(
-                    std::chrono::seconds(2),
+                    std::chrono::seconds(10),
                     std::bind(&MissionNode::timer_1sec_callback, this));
                 timer_1sec_started = true;
-                RCLCPP_INFO(this->get_logger(), "2-second one-shot timer started ");
+                // RCLCPP_INFO(this->get_logger(), "2-second one-shot timer started ");
             }
 
         }
         else if ( this->stage_step == 24 ) {
             // after go to the modified pose of the little table
-            // elevator_ctrl = -1;
-            // if ( touch == 1 && touched_for_sticker == 0) {
-            //     touched_for_sticker = 1;
-            //     elevator_ctrl = 0;
-            //     gripper_ctrl = 1;
-            // }
-            // if ( touched_for_sticker == 1 && gripper_status == 1 ) {
-            //     mission_complete = 1;
-            // }
-            if ( touch == 1 ) {
-                touched_for_sticker = 1;
-            }
             if ( touched_for_sticker == 0 ) {
                 elevator_ctrl = -1;
             }
             else {
                 elevator_ctrl = 0;
+                gripper_ctrl = 0;
             }
-            if ( touched_for_sticker == 1 ) {
-                gripper_ctrl = 1;
+            if ( touch == 1 ) {
+                touched_for_sticker = 1;
             }
-            if ( gripper_status == 1 ) {
+            if ( gripper_status == 0 ) {
                 mission_complete = true;
             }
         }
@@ -186,7 +176,7 @@ private:
 
         
         auto mission_finish_msg = std_msgs::msg::Bool();
-        mission_finish_msg.data = mission_complete; // Use the same logic as mission_complete
+        mission_finish_msg.data = mission_complete; 
         pub_cmd_mission_finish_->publish(mission_finish_msg);
         
         auto servoturn_msg = std_msgs::msg::Int32();
@@ -202,13 +192,17 @@ private:
     }
 
     void timer_1sec_callback() {
-        // Your one-time code here that executes 1 second after touch
-        RCLCPP_INFO(this->get_logger(), "one-shot timer executed!");
+        // Your one-time code here that executes after the timer duration
+        // RCLCPP_INFO(this->get_logger(), "one-shot timer executed!");
         
         // Add your specific logic that should run once, 1 second after touch
         mission_complete = true; 
         timer_1sec_started = false;
         
+        auto mission_finish_msg = std_msgs::msg::Bool();
+        mission_finish_msg.data = mission_complete; 
+        pub_cmd_mission_finish_->publish(mission_finish_msg);
+
         // Cancel the timer after execution to prevent it from running again
         if (timer_1sec_) {
             timer_1sec_->cancel();
@@ -240,9 +234,9 @@ private:
 
     int stage_step = 0;
 
-    bool gripper_ctrl = 1;
+    bool gripper_ctrl = 0;
     bool mission_complete = false;
-    int forward_ctrl = 217;
+    int forward_ctrl = 217; // big table 2, small table 3, the most forward is 1
 
     bool gripper_status = 0;
     bool basket_status = 0;

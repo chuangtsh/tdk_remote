@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import math
 
-cm_per_pixel = 0.115625
+mm_per_pixel = 0.793
 
 class Algorithm:
     def __init__(self):
@@ -136,14 +136,19 @@ class Coffee(Node):
             10
         )
         # Create integer publisher for x-coordinate difference
-        self.x_diff_publisher = self.create_publisher(Int32, 'x_trans', 10)
+        self.x_diff_publisher = self.create_publisher(Int32, '/cmd_Xoffset', 10)
         
         # Initialize stage_step
         self.stage_step = 0
+        
+        # Add averaging variables
+        self.x_diff_buffer = []
+        self.buffer_size = 5  # Average over 5 measurements
+        self.measurement_count = 0
 
     def image_callback(self, msg):
         # Only process images when stage_step is in the appropriate range
-        if self.stage_step > 10 and self.stage_step < 30:
+        if self.stage_step > 10 and self.stage_step < 30 or True:
             try:
                 self.cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
                 self.process_and_publish()
@@ -154,32 +159,56 @@ class Coffee(Node):
         try:
             # image processing logic
             red_dot_center, sticker_center = process_image(self.cv_image)
-            red_dot_center[0] += 165
+            
+            # Adjust red_dot_center by converting tuple to list, modifying, then using the values
+            if red_dot_center:
+                adjusted_red_dot_x = red_dot_center[0]
+                adjusted_red_dot_center = (adjusted_red_dot_x, red_dot_center[1])
+            else:
+                adjusted_red_dot_center = None
             
             # Calculate and publish x-coordinate difference
-            if red_dot_center and sticker_center:
-                x_diff = sticker_center[0] - red_dot_center[0]
+            if adjusted_red_dot_center and sticker_center:
+                x_diff = sticker_center[0] - adjusted_red_dot_center[0]
 
                 x_diff *= -1
-                x_diff *= cm_per_pixel
+                x_diff *= mm_per_pixel
+                x_diff *= 0.1
                 
-                # Create and publish the x-coordinate difference message
-                diff_msg = Int32()
-                diff_msg.data = int(x_diff)  # Convert to integer
-                self.x_diff_publisher.publish(diff_msg)
+                current_x_diff = int(x_diff)
                 
-                # Log the results
-                # self.get_logger().info(f'Red dot at: {red_dot_center}, Sticker at: {sticker_center}, X-diff: {x_diff}')
+                # Add to buffer for averaging
+                self.x_diff_buffer.append(current_x_diff)
+                self.measurement_count += 1
+                
+                # Keep buffer at specified size
+                if len(self.x_diff_buffer) > self.buffer_size:
+                    self.x_diff_buffer.pop(0)  # Remove oldest measurement
+                
+                # Publish averaged value every buffer_size measurements
+                if self.measurement_count % self.buffer_size == 0:
+                    averaged_x_diff = int(sum(self.x_diff_buffer) / len(self.x_diff_buffer))
+                    
+                    diff_msg = Int32()
+                    diff_msg.data = averaged_x_diff
+                    self.x_diff_publisher.publish(diff_msg)
+                    
+                    self.get_logger().info(f'Averaged X-diff: {averaged_x_diff} (based on {len(self.x_diff_buffer)} measurements)')
+                
             else:
-                # If either target is not found, publish 0 or a special value
+                # If either target is not found, publish 0 and reset buffer
                 diff_msg = Int32()
-                diff_msg.data = 0  # You can change this to a special value like -999 if preferred
+                diff_msg.data = 0
                 self.x_diff_publisher.publish(diff_msg)
                 
-                if not red_dot_center:
-                    self.get_logger().warn('Red dot not detected')
-                if not sticker_center:
-                    self.get_logger().warn('Sticker not detected')
+                # Reset averaging when targets are lost
+                self.x_diff_buffer.clear()
+                self.measurement_count = 0
+                
+                # if not red_dot_center:
+                #     self.get_logger().warn('Red dot not detected')
+                # if not sticker_center:
+                #     self.get_logger().warn('Sticker not detected')
             
         except Exception as e:
             self.get_logger().error(f'Error processing image: {e}')

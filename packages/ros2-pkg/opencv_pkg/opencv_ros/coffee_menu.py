@@ -270,7 +270,9 @@ def detect_parallelograms(img):
         if len(approx) == 4:
             area = cv2.contourArea(approx)
             if area > 500:
-                if not is_near_border(approx, img.shape, border_margin=30):
+                # Check if any point is too low (y > 350)
+                has_low_pixel = any(point[0][1] > 350 for point in approx)
+                if not has_low_pixel and not is_near_border(approx, img.shape, border_margin=30):
                     all_quadrilaterals.append(approx)
                     if is_parallelogram(approx):
                         parallelograms.append(approx)
@@ -278,7 +280,7 @@ def detect_parallelograms(img):
     parallelograms = remove_duplicate_contours(parallelograms)
     # Draw directly on the input image
     center_brightness = 0
-    pos_label = 0  # Initialize pos_label
+    pos_label = -1  # Initialize pos_label
     for i, parallelogram in enumerate(parallelograms):
         cv2.drawContours(img, [parallelogram], -1, (0, 255, 0), 3)
     if parallelograms:
@@ -293,6 +295,7 @@ def detect_parallelograms(img):
     if parallelograms:
         most_distinct_idx, _, _ = find_most_distinct_parallelogram(img, parallelograms)
         color_analysis = analyze_region_color(img, parallelograms[most_distinct_idx])
+
         center_brightness = 1 if color_analysis.get('is_mostly_light', False) else 2
         
         M = cv2.moments(parallelograms[most_distinct_idx])
@@ -356,7 +359,7 @@ class Coffee(Node):
                 self.coffee_pose_pub.publish(pose_msg)
                 
                 # Log the published values
-                self.get_logger().info(f'Published coffee_type: {coffee_type}, coffee_pose: {coffee_pose}')
+                # self.get_logger().info(f'Published coffee_type: {coffee_type}, coffee_pose: {coffee_pose}')
                 
             except Exception as e:
                 self.get_logger().error(f'Error converting image: {e}')

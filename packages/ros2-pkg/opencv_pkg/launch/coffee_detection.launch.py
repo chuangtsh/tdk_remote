@@ -25,7 +25,6 @@ def generate_launch_description():
             remappings=[]
         ),
         
-        # Mission control node
         Node(
             package='mission_ctrl',
             executable='mission2',

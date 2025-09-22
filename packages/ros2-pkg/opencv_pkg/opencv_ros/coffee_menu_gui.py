@@ -269,12 +269,20 @@ def detect_parallelograms(img):
         if len(approx) == 4:
             area = cv2.contourArea(approx)
             if area > 500:
-                if not is_near_border(approx, img.shape, border_margin=30):
+                # Check if any point is too low (y > 350)
+                has_low_pixel = any(point[0][1] > 350 for point in approx)
+                if not has_low_pixel and not is_near_border(approx, img.shape, border_margin=30):
                     all_quadrilaterals.append(approx)
                     if is_parallelogram(approx):
                         parallelograms.append(approx)
     all_quadrilaterals = remove_duplicate_contours(all_quadrilaterals)
     parallelograms = remove_duplicate_contours(parallelograms)
+    
+    # Draw the y=350 boundary line
+    height, width = img.shape[:2]
+    if height > 350:
+        cv2.line(img, (0, 350), (width, 350), (255, 0, 0), 2)  # Blue line at y=350
+    
     # Draw directly on the input image
     for i, parallelogram in enumerate(parallelograms):
         cv2.drawContours(img, [parallelogram], -1, (0, 255, 0), 3)

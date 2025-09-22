@@ -44,13 +44,14 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /dev/dri:/dev/dri
       - /dev/shm:/dev/shm
-      - ./bridge.yaml:/bridge.yaml:ro
+      - ./bridge.yaml:/bridge.yaml
     command: >
       bash -c "export ROS_MASTER_URI=http://localhost:11311 &&
                echo 'starting bridge with topic filtering' && 
                source /ros2_humble/install/setup.bash &&
                source /ros2_humble/install/ros1_bridge/share/ros1_bridge/local_setup.bash &&
-               ros2 run ros1_bridge dynamic_bridge"
+               rosparam load /bridge.yaml &&
+               ros2 run ros1_bridge parameter_bridge"
 
   ros1:
     profiles: ['communication']
@@ -131,8 +132,40 @@ services:
     environment:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - ROS_DOMAIN_ID=24
+      - DISPLAY=${DISPLAY:-:0}
+      - QT_X11_NO_MITSHM=1
+      - XAUTHORITY=/tmp/.X11-unix/Xauthority
     device_cgroup_rules:
       - "c 81:* rmw"
       - "c 189:* rmw"
     # command: bash -ic "colcon build && source install/setup.bash && ros2 launch realsense2_camera rs_multi_camera_launch.py"
     command: bash -ic "colcon build && source install/setup.bash && ros2 launch realsense2_camera rs_multi_camera_launch.py "
+
+  topic-monitor:
+    profiles: ['camera']
+    build:
+      context: .
+      dockerfile: dockerfile.camera
+      target: opencv
+      args:
+        USER: opencv
+    <<: *common-env
+    image: vision-tdk-x1:ros2
+    container_name: kesler-topic-monitor-x1
+    network_mode: host
+    stop_grace_period: 1s
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - ROS_DOMAIN_ID=24
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    command: >
+      /bin/bash -c "
+      source /opt/ros/humble/setup.bash && 
+      echo 'Monitoring /current_stage topic...' && 
+      while true; do
+        echo 'Waiting for /current_stage topic...' &&
+        timeout 10 ros2 topic echo /current_stage || echo 'Topic not available, retrying in 5 seconds...' &&
+        sleep 1
+      done"
