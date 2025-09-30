@@ -1,4 +1,5 @@
 #include <memory>
+#include <chrono>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/int32.hpp"
 #include "std_msgs/msg/bool.hpp"
@@ -89,7 +90,6 @@ private:
 
     void timer_callback() {
         int elevator_ctrl = 0; // 0 stop, 1 up, -1 down, 2: 650
-        bool basket_ctrl = 0; // closed is 0?
         int servoturn_ctrl = 0; // servo turn command 1 is forward, 2 is backward
         mission_complete = false;
         // gripper_ctrl: 0 is back, 1 is forward
@@ -109,7 +109,7 @@ private:
                 // Start 1-second one-shot timer when touched_for_menu becomes 1
                 if (!timer_1sec_started) {
                     timer_1sec_ = this->create_wall_timer(
-                        std::chrono::seconds(2),
+                        std::chrono::seconds(1),
                         std::bind(&MissionNode::timer_1sec_callback, this));
                     timer_1sec_started = true;
                     // RCLCPP_INFO(this->get_logger(), "1-second one-shot timer started after touch");
@@ -120,45 +120,83 @@ private:
         else if ( this->stage_step == 22 ) {
             // after go to the correct cup
             gripper_ctrl = 1;
-            if ( gripper_status == 1 ) {
-                elevator_ctrl = 2;
-                // Start 1-second one-shot timer when touched_for_menu becomes 1
-                if (!timer_1sec_started) {
-                    timer_1sec_ = this->create_wall_timer(
-                        std::chrono::seconds(5),
-                        std::bind(&MissionNode::timer_1sec_callback, this));
-                    timer_1sec_started = true;
-                    // RCLCPP_INFO(this->get_logger(), "1-second one-shot timer started after touch");
+            // if ( gripper_status == 1 ) {
+                // Start time measurement when gripper_status becomes 1
+                if (!gripper_wait_started) {
+                    gripper_wait_start_time = std::chrono::steady_clock::now();
+                    gripper_wait_started = true;
                 }
-            }
+                
+                // Check if 1 second has elapsed since gripper_status became 1
+                auto current_time = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(current_time - gripper_wait_start_time);
+                
+                if (elapsed.count() >= 1) {
+                    // 1 second has passed, now move elevator
+                    elevator_ctrl = 2;
+                }
+                if ( elapsed.count() >= 4 ) {
+                    mission_complete = true;
+                }
+            // }
         }
         else if ( this->stage_step == 23 ) {
             // to see the sticker, make cascade upper
             elevator_ctrl = 2;
-            if (!timer_1sec_started) {
-                timer_1sec_ = this->create_wall_timer(
-                    std::chrono::seconds(10),
-                    std::bind(&MissionNode::timer_1sec_callback, this));
-                timer_1sec_started = true;
-                // RCLCPP_INFO(this->get_logger(), "2-second one-shot timer started ");
+            
+            // Start time measurement when stage 23 begins
+            if (!stage23_timer_started) {
+                stage23_start_time = std::chrono::steady_clock::now();
+                stage23_timer_started = true;
+            }
+            
+            // Check if 5 seconds have elapsed
+            auto current_time = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(current_time - stage23_start_time);
+            
+            if (elapsed.count() >= 5) {
+                // 5 seconds have passed, mission complete
+                mission_complete = true;
             }
 
         }
         else if ( this->stage_step == 24 ) {
             // after go to the modified pose of the little table
-            if ( touched_for_sticker == 0 ) {
-                elevator_ctrl = -1;
+
+            forward_ctrl = 2;
+
+            // Start stage 24 timer once when we first enter this stage
+            if (!stage24_timer_started) {
+                stage24_start_time = std::chrono::steady_clock::now();
+                stage24_timer_started = true;
             }
-            else {
-                elevator_ctrl = 0;
-                gripper_ctrl = 0;
+
+            auto current_time = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(current_time - stage24_start_time);
+
+            if ( elapsed.count() > 8 ) {
+
+                if ( touched_for_sticker == 0 ) {
+                    elevator_ctrl = -1;
+                }
+                else {
+                    elevator_ctrl = 0;
+                    gripper_ctrl = 0;
+                }
+                if ( touch == 1 ) {
+                    touched_for_sticker = 1;
+                }
+                if ( gripper_status == 0 ) {
+                    mission_complete = true;
+                }
             }
-            if ( touch == 1 ) {
-                touched_for_sticker = 1;
-            }
-            if ( gripper_status == 0 ) {
-                mission_complete = true;
-            }
+
+        }
+        else if ( this->stage_step == 31 ) {
+            basket_ctrl = 0;
+        }
+        else if ( this->stage_step == 32 ) {
+            basket_ctrl = 1;
         }
         
         // Publish the commands
@@ -232,13 +270,31 @@ private:
     rclcpp::TimerBase::SharedPtr timer_1sec_;
     bool timer_1sec_started = false;
 
+    // Time tracking for stage 24
+    std::chrono::steady_clock::time_point forward_start_time;
+    bool forward_command_sent = false;
+
+    // Time tracking for stage 22 - wait 1 sec after gripper_status == 1
+    std::chrono::steady_clock::time_point gripper_wait_start_time;
+    bool gripper_wait_started = false;
+
+    // Time tracking for stage 23 - wait 5 sec
+    std::chrono::steady_clock::time_point stage23_start_time;
+    bool stage23_timer_started = false;
+
+    // Time tracking for stage 24 - fallback timeout
+    std::chrono::steady_clock::time_point stage24_start_time;
+    bool stage24_timer_started = false;
+
+
     int stage_step = 0;
 
     bool gripper_ctrl = 0;
     bool mission_complete = false;
-    int forward_ctrl = 217; // big table 2, small table 3, the most forward is 1
+    int forward_ctrl = 1; // big table 2, small table 3, the most forward is 1
 
     bool gripper_status = 0;
+    bool basket_ctrl = 1; // closed is 0?
     bool basket_status = 0;
     bool touch = 0;
     int current_y = 0;

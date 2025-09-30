@@ -73,13 +73,18 @@ services:
       source /opt/ros/noetic/setup.bash && 
       source /root/comm-ws/devel/setup.bash && 
       cd /root/comm-ws &&
-      echo 'Waiting for TTY device...' &&
-      while [ ! -e /dev/ttyACM0 ]; do
-        echo 'TTY device /dev/ttyACM0 not found, waiting...'
+      echo 'Waiting for TTY devices (/dev/ttyACM0 or /dev/ttyACM1)...' &&
+      while [ ! -e /dev/ttyACM0 ] || [ ! -e /dev/ttyACM1 ]; do
+        echo 'One of /dev/ttyACM0 or /dev/ttyACM1 was not found, waiting...'
         sleep 2
       done &&
-      echo 'TTY device found, setting permissions...' &&
-      sudo chmod 777 /dev/ttyACM0 &&
+      echo 'Setting permissions on available ACM devices...' &&
+      for dev in /dev/ttyACM0 /dev/ttyACM1; do
+        if [ -e '$dev' ]; then
+          chmod 777 '$dev' || true;
+          echo 'Configured $dev';
+        fi;
+      done &&
       echo 'Launching rosserial server...' &&
       roslaunch rosserial_server stm32.launch
       "

@@ -6,6 +6,19 @@ import cv2
 import numpy as np
 import math
 
+# Boundary detection configuration variables
+BOUNDARY_TOP = 100       # Top boundary (y < BOUNDARY_TOP)
+BOUNDARY_BOTTOM = 350    # Bottom boundary (y > BOUNDARY_BOTTOM)  
+BOUNDARY_LEFT = 365       # Left boundary (x < BOUNDARY_LEFT)
+BOUNDARY_RIGHT = 50      # Right boundary (x > width - BOUNDARY_RIGHT)
+
+# Visual boundary line colors (B, G, R format for OpenCV)
+BOUNDARY_COLOR_TOP = (0, 0, 255)     # Red for top boundary
+BOUNDARY_COLOR_BOTTOM = (255, 0, 0)  # Blue for bottom boundary  
+BOUNDARY_COLOR_LEFT = (0, 255, 0)    # Green for left boundary
+BOUNDARY_COLOR_RIGHT = (0, 255, 255) # Yellow for right boundary
+BOUNDARY_LINE_THICKNESS = 2
+
 def is_near_border(contour, img_shape, border_margin=20):
     """
     Check if any point of the contour is too close to the image border
@@ -269,19 +282,31 @@ def detect_parallelograms(img):
         if len(approx) == 4:
             area = cv2.contourArea(approx)
             if area > 500:
-                # Check if any point is too low (y > 350)
-                has_low_pixel = any(point[0][1] > 350 for point in approx)
-                if not has_low_pixel and not is_near_border(approx, img.shape, border_margin=30):
+                # Check if any point is outside acceptable boundaries
+                has_boundary_violation = False
+                for point in approx:
+                    x, y = point[0]
+                    # Check all boundaries using configurable variables
+                    if (y < BOUNDARY_TOP or           # too high
+                        y > BOUNDARY_BOTTOM or        # too low  
+                        x < BOUNDARY_LEFT or          # too left
+                        x > width - BOUNDARY_RIGHT):  # too right
+                        has_boundary_violation = True
+                        break
+                
+                if not has_boundary_violation and not is_near_border(approx, img.shape, border_margin=30):
                     all_quadrilaterals.append(approx)
                     if is_parallelogram(approx):
                         parallelograms.append(approx)
     all_quadrilaterals = remove_duplicate_contours(all_quadrilaterals)
     parallelograms = remove_duplicate_contours(parallelograms)
     
-    # Draw the y=350 boundary line
+    # Draw boundary lines for visual debugging using configurable variables
     height, width = img.shape[:2]
-    if height > 350:
-        cv2.line(img, (0, 350), (width, 350), (255, 0, 0), 2)  # Blue line at y=350
+    cv2.line(img, (0, BOUNDARY_TOP), (width, BOUNDARY_TOP), BOUNDARY_COLOR_TOP, BOUNDARY_LINE_THICKNESS)  # Top boundary
+    cv2.line(img, (0, BOUNDARY_BOTTOM), (width, BOUNDARY_BOTTOM), BOUNDARY_COLOR_BOTTOM, BOUNDARY_LINE_THICKNESS)  # Bottom boundary 
+    cv2.line(img, (BOUNDARY_LEFT, 0), (BOUNDARY_LEFT, height), BOUNDARY_COLOR_LEFT, BOUNDARY_LINE_THICKNESS)  # Left boundary
+    cv2.line(img, (width-BOUNDARY_RIGHT, 0), (width-BOUNDARY_RIGHT, height), BOUNDARY_COLOR_RIGHT, BOUNDARY_LINE_THICKNESS)  # Right boundary
     
     # Draw directly on the input image
     for i, parallelogram in enumerate(parallelograms):

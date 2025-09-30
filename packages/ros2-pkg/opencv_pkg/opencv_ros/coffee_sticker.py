@@ -143,7 +143,7 @@ class Coffee(Node):
         
         # Add averaging variables
         self.x_diff_buffer = []
-        self.buffer_size = 5  # Average over 5 measurements
+        self.buffer_size = 3  # Average over 5 measurements
         self.measurement_count = 0
 
     def image_callback(self, msg):
@@ -169,6 +169,7 @@ class Coffee(Node):
             
             # Calculate and publish x-coordinate difference
             if adjusted_red_dot_center and sticker_center:
+                # x_diff = sticker_center[0] - adjusted_red_dot_center[0]
                 x_diff = sticker_center[0] - adjusted_red_dot_center[0]
 
                 x_diff *= -1
@@ -177,9 +178,10 @@ class Coffee(Node):
                 
                 current_x_diff = int(x_diff)
                 
-                # Add to buffer for averaging
-                self.x_diff_buffer.append(current_x_diff)
-                self.measurement_count += 1
+                if current_x_diff < 12:
+                    # Add to buffer for averaging
+                    self.x_diff_buffer.append(current_x_diff)
+                    self.measurement_count += 1
                 
                 # Keep buffer at specified size
                 if len(self.x_diff_buffer) > self.buffer_size:
